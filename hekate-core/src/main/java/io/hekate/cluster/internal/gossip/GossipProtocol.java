@@ -37,7 +37,11 @@ public abstract class GossipProtocol {
 
         HEARTBEAT_REQUEST,
 
-        HEARTBEAT_REPLY
+        HEARTBEAT_RESPONSE,
+
+        STATE_REQUEST,
+
+        STATE_RESPONSE
     }
 
     public abstract static class GossipMessage extends GossipProtocol {
@@ -70,14 +74,14 @@ public abstract class GossipProtocol {
         }
     }
 
-    public static class HeartbeatReply extends GossipMessage {
-        public HeartbeatReply(ClusterAddress from, ClusterAddress to) {
+    public static class HeartbeatResponse extends GossipMessage {
+        public HeartbeatResponse(ClusterAddress from, ClusterAddress to) {
             super(from, to);
         }
 
         @Override
         public Type type() {
-            return Type.HEARTBEAT_REPLY;
+            return Type.HEARTBEAT_RESPONSE;
         }
     }
 
@@ -92,8 +96,8 @@ public abstract class GossipProtocol {
         }
     }
 
-    public abstract static class JoinReply extends GossipMessage {
-        public JoinReply(ClusterAddress from, ClusterAddress to) {
+    public abstract static class JoinResponse extends GossipMessage {
+        public JoinResponse(ClusterAddress from, ClusterAddress to) {
             super(from, to);
         }
 
@@ -104,7 +108,7 @@ public abstract class GossipProtocol {
         public abstract JoinReject asReject();
     }
 
-    public static class JoinAccept extends JoinReply {
+    public static class JoinAccept extends JoinResponse {
         private final Gossip gossip;
 
         public JoinAccept(ClusterAddress from, ClusterAddress to, Gossip gossip) {
@@ -139,7 +143,7 @@ public abstract class GossipProtocol {
         }
     }
 
-    public static class JoinReject extends JoinReply {
+    public static class JoinReject extends JoinResponse {
         public enum RejectType {
             TEMPORARY,
 
@@ -314,6 +318,51 @@ public abstract class GossipProtocol {
         @Override
         public Type type() {
             return Type.GOSSIP_UPDATE_DIGEST;
+        }
+    }
+
+    public static class StateRequest extends GossipMessage {
+        public StateRequest(ClusterAddress from, ClusterAddress to) {
+            super(from, to);
+        }
+
+        public StateResponse accept(Gossip state) {
+            return new StateResponse(to(), from(), false, state);
+        }
+
+        public StateResponse reject() {
+            return new StateResponse(to(), from(), true, null);
+        }
+
+        @Override
+        public Type type() {
+            return Type.STATE_REQUEST;
+        }
+    }
+
+    public static class StateResponse extends GossipMessage {
+        private final Gossip state;
+
+        private boolean reject;
+
+        public StateResponse(ClusterAddress from, ClusterAddress to, boolean reject, Gossip state) {
+            super(from, to);
+
+            this.reject = reject;
+            this.state = state;
+        }
+
+        public boolean isReject() {
+            return reject;
+        }
+
+        public Gossip state() {
+            return state;
+        }
+
+        @Override
+        public Type type() {
+            return Type.STATE_RESPONSE;
         }
     }
 

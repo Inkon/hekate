@@ -25,7 +25,7 @@ import io.hekate.cluster.health.FailureDetectorMock;
 import io.hekate.cluster.internal.DefaultClusterNodeBuilder;
 import io.hekate.cluster.internal.gossip.GossipProtocol.JoinAccept;
 import io.hekate.cluster.internal.gossip.GossipProtocol.JoinReject;
-import io.hekate.cluster.internal.gossip.GossipProtocol.JoinReply;
+import io.hekate.cluster.internal.gossip.GossipProtocol.JoinResponse;
 import io.hekate.cluster.internal.gossip.GossipProtocol.JoinRequest;
 import io.hekate.cluster.internal.gossip.GossipProtocol.Update;
 import io.hekate.cluster.internal.gossip.GossipProtocol.UpdateBase;
@@ -75,7 +75,7 @@ public class GossipManagerTest extends HekateTestBase {
 
         InetSocketAddress address = m.address().socket();
 
-        JoinReply reply = m.processJoinRequest(new JoinRequest(newNode(), CLUSTER_ID + "_another", address));
+        JoinResponse reply = m.processJoinRequest(new JoinRequest(newNode(), CLUSTER_ID + "_another", address));
 
         assertNotNull(reply);
         assertFalse(reply.isAccept());
@@ -276,7 +276,7 @@ public class GossipManagerTest extends HekateTestBase {
 
         assertSame(GossipNodeStatus.DOWN, m.status());
 
-        JoinReply reply = m.processJoinRequest(new JoinRequest(newNode(), CLUSTER_ID, m.address().socket()));
+        JoinResponse reply = m.processJoinRequest(new JoinRequest(newNode(), CLUSTER_ID, m.address().socket()));
 
         assertFalse(reply.isAccept());
         assertSame(JoinReject.RejectType.TEMPORARY, reply.asReject().rejectType());
@@ -288,7 +288,7 @@ public class GossipManagerTest extends HekateTestBase {
 
         m.join(Collections.emptyList());
 
-        JoinReply reply = m.processJoinRequest(new JoinRequest(newNode(), CLUSTER_ID, m.address().socket()));
+        JoinResponse reply = m.processJoinRequest(new JoinRequest(newNode(), CLUSTER_ID, m.address().socket()));
 
         assertFalse(reply.isAccept());
         assertSame(JoinReject.RejectType.PERMANENT, reply.asReject().rejectType());
@@ -303,7 +303,7 @@ public class GossipManagerTest extends HekateTestBase {
         ClusterNode newNode = newNode();
 
         // First attempt to join (should succeed).
-        JoinReply reply = m.processJoinRequest(new JoinRequest(newNode, CLUSTER_ID, m.address().socket()));
+        JoinResponse reply = m.processJoinRequest(new JoinRequest(newNode, CLUSTER_ID, m.address().socket()));
 
         assertTrue(reply.isAccept());
 
@@ -315,7 +315,7 @@ public class GossipManagerTest extends HekateTestBase {
         assertTrue(m.localGossip().isDown(newNode.id()));
 
         // First attempt to join (should fail).
-        JoinReply reply2 = m.processJoinRequest(new JoinRequest(newNode, CLUSTER_ID, m.address().socket()));
+        JoinResponse reply2 = m.processJoinRequest(new JoinRequest(newNode, CLUSTER_ID, m.address().socket()));
 
         assertFalse(reply2.isAccept());
         assertSame(JoinReject.RejectType.CONFLICT, reply2.asReject().rejectType());

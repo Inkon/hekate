@@ -22,12 +22,14 @@ import io.hekate.cluster.ClusterNodeId;
 import io.hekate.cluster.ClusterNodeRuntime;
 import io.hekate.cluster.internal.DefaultClusterNode;
 import io.hekate.cluster.internal.DefaultClusterNodeRuntime;
-import io.hekate.cluster.internal.gossip.GossipProtocol.HeartbeatReply;
 import io.hekate.cluster.internal.gossip.GossipProtocol.HeartbeatRequest;
+import io.hekate.cluster.internal.gossip.GossipProtocol.HeartbeatResponse;
 import io.hekate.cluster.internal.gossip.GossipProtocol.JoinAccept;
 import io.hekate.cluster.internal.gossip.GossipProtocol.JoinReject;
 import io.hekate.cluster.internal.gossip.GossipProtocol.JoinRequest;
 import io.hekate.cluster.internal.gossip.GossipProtocol.LongTermConnect;
+import io.hekate.cluster.internal.gossip.GossipProtocol.StateRequest;
+import io.hekate.cluster.internal.gossip.GossipProtocol.StateResponse;
 import io.hekate.cluster.internal.gossip.GossipProtocol.Update;
 import io.hekate.cluster.internal.gossip.GossipProtocol.UpdateDigest;
 import io.hekate.codec.Codec;
@@ -173,11 +175,33 @@ public class GossipProtocolCodec implements Codec<GossipProtocol> {
 
                     break;
                 }
-                case HEARTBEAT_REPLY: {
-                    HeartbeatReply reply = (HeartbeatReply)msg;
+                case HEARTBEAT_RESPONSE: {
+                    HeartbeatResponse reply = (HeartbeatResponse)msg;
 
                     writeClusterAddress(reply.to(), out);
                     writeClusterAddress(reply.from(), out);
+
+                    break;
+                }
+                case STATE_REQUEST: {
+                    StateRequest request = (StateRequest)msg;
+
+                    writeClusterAddress(request.to(), out);
+                    writeClusterAddress(request.from(), out);
+
+                    break;
+                }
+                case STATE_RESPONSE: {
+                    StateResponse response = (StateResponse)msg;
+
+                    writeClusterAddress(response.to(), out);
+                    writeClusterAddress(response.from(), out);
+
+                    out.writeBoolean(response.isReject());
+
+                    if (!response.isReject()) {
+                        encodeGossip(response.state(), out);
+                    }
 
                     break;
                 }
@@ -292,11 +316,30 @@ public class GossipProtocolCodec implements Codec<GossipProtocol> {
 
                     break;
                 }
-                case HEARTBEAT_REPLY: {
+                case HEARTBEAT_RESPONSE: {
                     ClusterAddress to = readClusterAddress(in);
                     ClusterAddress from = readClusterAddress(in);
 
-                    result = new HeartbeatReply(from, to);
+                    result = new HeartbeatResponse(from, to);
+
+                    break;
+                }
+                case STATE_REQUEST: {
+                    ClusterAddress to = readClusterAddress(in);
+                    ClusterAddress from = readClusterAddress(in);
+
+                    result = new StateRequest(from, to);
+
+                    break;
+                }
+                case STATE_RESPONSE: {
+                    ClusterAddress to = readClusterAddress(in);
+                    ClusterAddress from = readClusterAddress(in);
+                    boolean reject = in.readBoolean();
+
+                    Gossip state = reject ? null : decodeGossip(in);
+
+                    result = new StateResponse(from, to, reject, state);
 
                     break;
                 }

@@ -22,8 +22,8 @@ import io.hekate.cluster.ClusterNodeId;
 import io.hekate.cluster.health.FailureDetector;
 import io.hekate.cluster.internal.gossip.GossipProtocol.JoinAccept;
 import io.hekate.cluster.internal.gossip.GossipProtocol.JoinReject;
-import io.hekate.cluster.internal.gossip.GossipProtocol.JoinReply;
 import io.hekate.cluster.internal.gossip.GossipProtocol.JoinRequest;
+import io.hekate.cluster.internal.gossip.GossipProtocol.JoinResponse;
 import io.hekate.cluster.internal.gossip.GossipProtocol.Update;
 import io.hekate.cluster.internal.gossip.GossipProtocol.UpdateBase;
 import io.hekate.cluster.internal.gossip.GossipProtocol.UpdateDigest;
@@ -116,7 +116,7 @@ public class GossipManager {
         status = DOWN;
         lastStatus = DOWN;
 
-        updateLocalGossip(new Gossip());
+        localGossip = new Gossip();
 
         int failureQuorum = Math.max(1, failureDetector.failureQuorum());
 
@@ -289,7 +289,7 @@ public class GossipManager {
         return null;
     }
 
-    public JoinReply processJoinRequest(JoinRequest msg) {
+    public JoinResponse processJoinRequest(JoinRequest msg) {
         if (DEBUG) {
             log.debug("Processing join request [request={}]", msg);
         }

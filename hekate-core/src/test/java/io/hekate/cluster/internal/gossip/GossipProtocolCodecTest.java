@@ -21,7 +21,7 @@ import io.hekate.cluster.ClusterAddress;
 import io.hekate.cluster.ClusterNode;
 import io.hekate.cluster.ClusterNodeRuntime;
 import io.hekate.cluster.internal.DefaultClusterNodeBuilder;
-import io.hekate.cluster.internal.gossip.GossipProtocol.HeartbeatReply;
+import io.hekate.cluster.internal.gossip.GossipProtocol.HeartbeatResponse;
 import io.hekate.cluster.internal.gossip.GossipProtocol.HeartbeatRequest;
 import io.hekate.cluster.internal.gossip.GossipProtocol.JoinAccept;
 import io.hekate.cluster.internal.gossip.GossipProtocol.JoinReject;
@@ -482,9 +482,9 @@ public class GossipProtocolCodecTest extends HekateTestBase {
             ClusterAddress from = newNode().address();
             ClusterAddress to = newNode().address();
 
-            HeartbeatReply before = new HeartbeatReply(from, to);
+            HeartbeatResponse before = new HeartbeatResponse(from, to);
 
-            HeartbeatReply after = encodeDecode(before);
+            HeartbeatResponse after = encodeDecode(before);
 
             assertEquals(from, after.from());
             assertEquals(to, after.to());

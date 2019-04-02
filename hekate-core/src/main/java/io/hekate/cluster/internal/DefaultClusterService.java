@@ -39,12 +39,14 @@ import io.hekate.cluster.internal.gossip.GossipNodeStatus;
 import io.hekate.cluster.internal.gossip.GossipPolicy;
 import io.hekate.cluster.internal.gossip.GossipProtocol;
 import io.hekate.cluster.internal.gossip.GossipProtocol.GossipMessage;
-import io.hekate.cluster.internal.gossip.GossipProtocol.HeartbeatReply;
 import io.hekate.cluster.internal.gossip.GossipProtocol.HeartbeatRequest;
+import io.hekate.cluster.internal.gossip.GossipProtocol.HeartbeatResponse;
 import io.hekate.cluster.internal.gossip.GossipProtocol.JoinAccept;
 import io.hekate.cluster.internal.gossip.GossipProtocol.JoinReject;
-import io.hekate.cluster.internal.gossip.GossipProtocol.JoinReply;
 import io.hekate.cluster.internal.gossip.GossipProtocol.JoinRequest;
+import io.hekate.cluster.internal.gossip.GossipProtocol.JoinResponse;
+import io.hekate.cluster.internal.gossip.GossipProtocol.StateRequest;
+import io.hekate.cluster.internal.gossip.GossipProtocol.StateResponse;
 import io.hekate.cluster.internal.gossip.GossipProtocol.UpdateBase;
 import io.hekate.cluster.internal.gossip.GossipProtocolCodec;
 import io.hekate.cluster.seed.SeedNodeProvider;
@@ -844,7 +846,21 @@ public class DefaultClusterService implements ClusterService, ClusterServiceMana
         guard.withReadLockIfInitialized(() -> {
             metricsSink.onGossipMessage(msg.type());
 
-            if (msg instanceof GossipMessage) {
+            if (msg instanceof StateRequest) {
+                // Check if state request is addressed to the local node and reject if it is not.
+                StateRequest request = (StateRequest)msg;
+
+                if (!localNode.address().equals(request.to())) {
+                    if (DEBUG) {
+                        log.debug("Rejected state request [node={}, request={}]", localNode, msg);
+                    }
+
+                    send(request.reject());
+
+                    return;
+                }
+            } else if (msg instanceof GossipMessage) {
+                // Check if gossip message is addressed to the local node and ignore if it is not.
                 GossipMessage gossipMsg = (GossipMessage)msg;
 
                 if (!localNode.address().equals(gossipMsg.to())) {
@@ -862,9 +878,9 @@ public class DefaultClusterService implements ClusterService, ClusterServiceMana
                 boolean reply = failureDetector.onHeartbeatRequest(msg.from());
 
                 if (reply) {
-                    send(new HeartbeatReply(localNode.address(), msg.from()));
+                    send(new HeartbeatResponse(localNode.address(), msg.from()));
                 }
-            } else if (type == GossipProtocol.Type.HEARTBEAT_REPLY) {
+            } else if (type == GossipProtocol.Type.HEARTBEAT_RESPONSE) {
                 failureDetector.onHeartbeatReply(msg.from());
             } else {
                 runOnGossipThread(() ->
@@ -898,16 +914,16 @@ public class DefaultClusterService implements ClusterService, ClusterServiceMana
                         acceptMgr.check(request.fromNode(), ctx.hekate()).thenAcceptAsync(rejectReason -> {
                             try {
                                 guard.withReadLockIfInitialized(() -> {
-                                    JoinReply reply;
+                                    JoinResponse response;
 
                                     if (rejectReason.isPresent()) {
-                                        reply = gossipMgr.reject(request, rejectReason.get());
+                                        response = gossipMgr.reject(request, rejectReason.get());
 
                                     } else {
-                                        reply = gossipMgr.processJoinRequest(request);
+                                        response = gossipMgr.processJoinRequest(request);
                                     }
 
-                                    send(reply);
+                                    send(response);
                                 });
                             } catch (RuntimeException | Error e) {
                                 fatalError(e);
@@ -923,9 +939,9 @@ public class DefaultClusterService implements ClusterService, ClusterServiceMana
                 case JOIN_ACCEPT: {
                     JoinAccept accept = (JoinAccept)msg;
 
-                    GossipMessage reply = gossipMgr.processJoinAccept(accept);
+                    GossipMessage response = gossipMgr.processJoinAccept(accept);
 
-                    send(reply);
+                    send(response);
 
                     break;
                 }
@@ -939,8 +955,26 @@ public class DefaultClusterService implements ClusterService, ClusterServiceMana
 
                     break;
                 }
+                case STATE_REQUEST: {
+                    StateRequest request = (StateRequest)msg;
+
+                    send(request.accept(gossipMgr.localGossip()));
+
+                    break;
+                }
+                case STATE_RESPONSE: {
+                    StateResponse response = (StateResponse)msg;
+
+                    if (response.isReject()) {
+                        // TODO
+                    } else {
+                        // TODO
+                    }
+
+                    break;
+                }
                 case HEARTBEAT_REQUEST:
-                case HEARTBEAT_REPLY:
+                case HEARTBEAT_RESPONSE:
                 case LONG_TERM_CONNECT:
                 default: {
                     throw new IllegalArgumentException("Unexpected message type: " + msg);

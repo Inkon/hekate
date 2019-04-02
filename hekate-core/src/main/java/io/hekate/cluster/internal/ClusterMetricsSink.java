@@ -44,7 +44,9 @@ class ClusterMetricsSink {
         register(GossipProtocol.Type.JOIN_ACCEPT, metrics);
         register(GossipProtocol.Type.JOIN_REJECT, metrics);
         register(GossipProtocol.Type.HEARTBEAT_REQUEST, metrics);
-        register(GossipProtocol.Type.HEARTBEAT_REPLY, metrics);
+        register(GossipProtocol.Type.HEARTBEAT_RESPONSE, metrics);
+        register(GossipProtocol.Type.STATE_REQUEST, metrics);
+        register(GossipProtocol.Type.STATE_RESPONSE, metrics);
     }
 
     public void onGossipMessage(GossipProtocol.Type type) {
