@@ -25,17 +25,17 @@ import io.hekate.cluster.ClusterServiceFactory;
  * <p>
  * This interface represents a component which is responsible for <a href="https://en.wikipedia.org/wiki/Split-brain_(computing)"
  * target="_blank">cluster split-brain</a> detection. Cluster service calls this component right before the local node joins to the cluster
- * or when some other node leaves the cluster. Implementations of this component should perform a quick check (possibly by consulting with
- * some shared resource) and verify that local node can reach other nodes.
+ * or when failure of some other node is detected. Implementations of this component should perform a quick check (possibly by consulting
+ * with some shared resource) to verify that local node can reach other nodes.
  * </p>
  *
  * <p>
- * If this component detects that local node can't reach other nodes then the cluster service will take actions according to the {@link
- * SplitBrainAction} defined in its {@link ClusterServiceFactory#setSplitBrainDetector(SplitBrainDetector) configuration}.
+ * If this component detects that local node can't reach other nodes then the cluster service will take actions according to the
+ * {@link SplitBrainAction} defined in its {@link ClusterServiceFactory#setSplitBrainDetector(SplitBrainDetector) configuration}.
  * </p>
  *
  * <p>
- * Note that it is possible combine multiple detectors with the help of {@link SplitBrainDetectorGroup}.
+ * Note that it is possible to combine multiple detectors with the help of {@link SplitBrainDetectorGroup}.
  * </p>
  *
  * @see ClusterServiceFactory#setSplitBrainDetector(SplitBrainDetector)

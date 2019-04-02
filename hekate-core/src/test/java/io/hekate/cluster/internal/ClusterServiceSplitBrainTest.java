@@ -70,6 +70,8 @@ public class ClusterServiceSplitBrainTest extends HekateNodeParamTestBase {
 
     @Test
     public void testRejoinWhenOtherNodeLeaves() throws Exception {
+        disableNodeFailurePostCheck();
+
         SplitBrainDetectorMock detector = new SplitBrainDetectorMock(true);
 
         HekateTestNode node = createNode(c -> {
@@ -85,7 +87,7 @@ public class ClusterServiceSplitBrainTest extends HekateNodeParamTestBase {
 
         detector.setValid(false);
 
-        leaving.leave();
+        leaving.terminate();
 
         node.awaitForStatus(Hekate.State.JOINING);
 
@@ -98,6 +100,8 @@ public class ClusterServiceSplitBrainTest extends HekateNodeParamTestBase {
 
     @Test
     public void testTerminateWhenOtherNodeLeaves() throws Exception {
+        disableNodeFailurePostCheck();
+
         SplitBrainDetectorMock detector = new SplitBrainDetectorMock(true);
 
         HekateTestNode node = createNode(c -> {
@@ -113,7 +117,7 @@ public class ClusterServiceSplitBrainTest extends HekateNodeParamTestBase {
 
         detector.setValid(false);
 
-        leaving.leave();
+        leaving.terminate();
 
         node.awaitForStatus(Hekate.State.DOWN);
 
@@ -122,6 +126,8 @@ public class ClusterServiceSplitBrainTest extends HekateNodeParamTestBase {
 
     @Test
     public void testKillJvmWhenOtherNodeLeaves() throws Exception {
+        disableNodeFailurePostCheck();
+
         try {
             SplitBrainDetectorMock detector = new SplitBrainDetectorMock(true);
 
@@ -146,7 +152,7 @@ public class ClusterServiceSplitBrainTest extends HekateNodeParamTestBase {
 
             detector.setValid(false);
 
-            leaving.leave();
+            leaving.terminate();
 
             node.awaitForStatus(Hekate.State.DOWN);
 
@@ -181,6 +187,8 @@ public class ClusterServiceSplitBrainTest extends HekateNodeParamTestBase {
 
     @Test
     public void testTerminateOnDetectorErrorWhenOtherNodeLeaves() throws Exception {
+        disableNodeFailurePostCheck();
+
         CountDownLatch errorLatch = new CountDownLatch(1);
 
         SplitBrainDetectorMock detector = new SplitBrainDetectorMock(true) {
@@ -209,7 +217,7 @@ public class ClusterServiceSplitBrainTest extends HekateNodeParamTestBase {
 
         detector.setValid(false);
 
-        leaving.leave();
+        leaving.terminate();
 
         await(errorLatch);
 

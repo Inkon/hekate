@@ -18,6 +18,7 @@ package io.hekate.cluster.internal.gossip;
 
 import io.hekate.cluster.ClusterNode;
 import io.hekate.cluster.ClusterNodeId;
+import java.time.Instant;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -35,6 +36,7 @@ import static java.util.Collections.emptySet;
 import static java.util.Collections.singletonList;
 import static java.util.Collections.unmodifiableMap;
 import static java.util.Collections.unmodifiableSet;
+import static java.util.stream.Collectors.toSet;
 
 public class Gossip extends GossipBase {
     private final long version;
@@ -44,6 +46,8 @@ public class Gossip extends GossipBase {
     private final Set<ClusterNodeId> removed;
 
     private final Set<ClusterNodeId> seen;
+
+    private final Set<GossipNodeFailure> failed;
 
     private final int maxJoinOrder;
 
@@ -57,6 +61,7 @@ public class Gossip extends GossipBase {
         members = Collections.emptyMap();
         seen = emptySet();
         removed = emptySet();
+        failed = emptySet();
     }
 
     public Gossip(
@@ -64,16 +69,19 @@ public class Gossip extends GossipBase {
         Map<ClusterNodeId, GossipNodeState> members,
         Set<ClusterNodeId> removed,
         Set<ClusterNodeId> seen,
+        Set<GossipNodeFailure> failed,
         int maxJoinOrder
     ) {
         assert members != null : "Members map is null.";
         assert removed != null : "Removed set is null.";
         assert seen != null : "Seen set is null.";
+        assert failed != null : "Failure list is null.";
 
         this.version = version;
         this.members = members;
         this.removed = removed;
         this.seen = seen;
+        this.failed = failed;
         this.maxJoinOrder = maxJoinOrder;
     }
 
@@ -86,7 +94,7 @@ public class Gossip extends GossipBase {
             return this;
         }
 
-        return new Gossip(version, members, removed, seen, maxJoinOrder);
+        return new Gossip(version, members, removed, seen, failed, maxJoinOrder);
     }
 
     public GossipNodeState member(ClusterNodeId id) {
@@ -122,6 +130,38 @@ public class Gossip extends GossipBase {
         return removed;
     }
 
+    public Set<GossipNodeFailure> failed() {
+        return failed;
+    }
+
+    public Gossip failed(Collection<GossipNodeFailure> newFailed) {
+        assert newFailed != null : "Failure set is null.";
+
+        Set<GossipNodeFailure> merged = new HashSet<>(failed);
+
+        merged.addAll(newFailed);
+
+        return new Gossip(version, members, removed, seen, merged, maxJoinOrder);
+    }
+
+    public Gossip cleanupFailures(long forgetTimeout) {
+        if (forgetTimeout <= 0 || failed.isEmpty()) {
+            return this;
+        }
+
+        Instant deadline = Instant.now().minusMillis(forgetTimeout);
+
+        if (failed.stream().anyMatch(n -> n.timestamp().isBefore(deadline))) {
+            Set<GossipNodeFailure> newFailed = failed.stream()
+                .filter(n -> n.timestamp().isBefore(deadline))
+                .collect(toSet());
+
+            return new Gossip(version, members, removed, seen, unmodifiableSet(newFailed), maxJoinOrder);
+        } else {
+            return this;
+        }
+    }
+
     public boolean isDown(ClusterNodeId id) {
         GossipNodeState member = member(id);
 
@@ -135,7 +175,7 @@ public class Gossip extends GossipBase {
         Map<ClusterNodeId, GossipNodeState> thisMembers = members();
         Map<ClusterNodeId, GossipNodeState> otherMembers = other.members();
 
-        Set<ClusterNodeId> removed = version() > other.version() ? removed() : other.removed();
+        Set<ClusterNodeId> newRemoved = version() > other.version() ? removed() : other.removed();
 
         // Members.
         Map<ClusterNodeId, GossipNodeState> newMembers = new HashMap<>();
@@ -144,7 +184,7 @@ public class Gossip extends GossipBase {
             GossipNodeState otherMember = otherMembers.get(id);
 
             if (otherMember == null) {
-                if (!removed.contains(id)) {
+                if (!newRemoved.contains(id)) {
                     newMembers.put(id, member);
                 }
             } else {
@@ -157,7 +197,7 @@ public class Gossip extends GossipBase {
             .forEach(e -> {
                 ClusterNodeId id = e.getKey();
 
-                if (!removed.contains(id)) {
+                if (!newRemoved.contains(id)) {
                     newMembers.put(e.getKey(), e.getValue());
                 }
             });
@@ -203,10 +243,30 @@ public class Gossip extends GossipBase {
             }
         });
 
+        // Failed.
+        Set<GossipNodeFailure> newFailed;
+
+        if (failed().equals(other.failed())) {
+            newFailed = failed();
+        } else {
+            newFailed = new HashSet<>(failed());
+
+            newFailed.addAll(other.failed());
+
+            newFailed = unmodifiableSet(newFailed);
+        }
+
         // Max join order.
         int newMaxJoinOrder = Integer.max(maxJoinOrder(), other.maxJoinOrder());
 
-        return new Gossip(newVersion, unmodifiableMap(newMembers), removed, unmodifiableSet(newSeen), newMaxJoinOrder);
+        return new Gossip(
+            newVersion,
+            unmodifiableMap(newMembers),
+            newRemoved,
+            unmodifiableSet(newSeen),
+            newFailed,
+            newMaxJoinOrder
+        );
     }
 
     public Gossip update(ClusterNodeId localNodeId, GossipNodeState modified) {
@@ -234,7 +294,7 @@ public class Gossip extends GossipBase {
             newMembers.put(n.id(), n)
         );
 
-        return new Gossip(version, unmodifiableMap(newMembers), removed, unmodifiableSet(newSeen), maxJoinOrder);
+        return new Gossip(version, unmodifiableMap(newMembers), removed, unmodifiableSet(newSeen), failed, maxJoinOrder);
     }
 
     public Gossip purge(ClusterNodeId localNodeId, Set<ClusterNodeId> removed) {
@@ -268,7 +328,7 @@ public class Gossip extends GossipBase {
         newRemoved = unmodifiableSet(newRemoved);
         newMembers = unmodifiableMap(newMembers);
 
-        return new Gossip(version + 1, newMembers, newRemoved, newSeen, maxJoinOrder);
+        return new Gossip(version + 1, newMembers, newRemoved, newSeen, failed, maxJoinOrder);
     }
 
     @Override
@@ -286,7 +346,7 @@ public class Gossip extends GossipBase {
 
             newSeen.add(localNodeId);
 
-            return new Gossip(version, members, removed, unmodifiableSet(newSeen), maxJoinOrder);
+            return new Gossip(version, members, removed, unmodifiableSet(newSeen), failed, maxJoinOrder);
         }
     }
 
@@ -302,7 +362,7 @@ public class Gossip extends GossipBase {
 
             mergedSeen.addAll(newSeen);
 
-            return new Gossip(version, members, removed, unmodifiableSet(mergedSeen), maxJoinOrder);
+            return new Gossip(version, members, removed, unmodifiableSet(mergedSeen), failed, maxJoinOrder);
         }
     }
 
@@ -335,7 +395,7 @@ public class Gossip extends GossipBase {
 
         newSeen.add(localNodeId);
 
-        return new Gossip(version, members, removed, unmodifiableSet(newSeen), maxJoinOrder);
+        return new Gossip(version, members, removed, unmodifiableSet(newSeen), failed, maxJoinOrder);
     }
 
     public boolean isConvergent() {
@@ -456,6 +516,7 @@ public class Gossip extends GossipBase {
                 + ", members=" + members.values()
                 + ", seen=" + seen
                 + ", removed=" + removed
+                + ", failed=" + failed
                 + ']';
         }
 

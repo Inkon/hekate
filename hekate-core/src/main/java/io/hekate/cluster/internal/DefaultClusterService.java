@@ -124,6 +124,8 @@ public class DefaultClusterService implements ClusterService, ClusterServiceMana
 
     private final int speedUpGossipSize;
 
+    private final long failureForgetTimeout;
+
     private final SeedNodeProvider seedNodeProvider;
 
     private final FailureDetector failureDetector;
@@ -209,6 +211,7 @@ public class DefaultClusterService implements ClusterService, ClusterServiceMana
         // Basic properties.
         this.gossipInterval = factory.getGossipInterval();
         this.speedUpGossipSize = factory.getSpeedUpGossipSize();
+        this.failureForgetTimeout = factory.getFailureForgetTimeout();
         this.failureDetector = factory.getFailureDetector();
         this.splitBrainAction = factory.getSplitBrainAction();
         this.splitBrainDetector = factory.getSplitBrainDetector();
@@ -334,7 +337,14 @@ public class DefaultClusterService implements ClusterService, ClusterServiceMana
             GossipListener gossipListener = createGossipListener();
 
             // Prepare gossip manager.
-            gossipMgr = new GossipManager(initCtx.clusterName(), localNode, speedUpGossipSize, failureDetector, gossipListener);
+            gossipMgr = new GossipManager(
+                initCtx.clusterName(),
+                localNode,
+                speedUpGossipSize,
+                failureForgetTimeout,
+                failureDetector,
+                gossipListener
+            );
 
             // Prepare gossip communication manager.
             NetworkConnector<GossipProtocol> connector = net.connector(PROTOCOL_ID);
@@ -1116,7 +1126,7 @@ public class DefaultClusterService implements ClusterService, ClusterServiceMana
                                     seedNodeMgr.stopCleaning();
                                 }
 
-                                if (!event.removed().isEmpty()) {
+                                if (!event.failed().isEmpty()) {
                                     checkSplitBrain(localNode);
                                 }
                             } catch (RuntimeException | Error e) {

@@ -28,14 +28,13 @@ import io.hekate.cluster.internal.gossip.GossipProtocol.Update;
 import io.hekate.cluster.internal.gossip.GossipProtocol.UpdateBase;
 import io.hekate.cluster.internal.gossip.GossipProtocol.UpdateDigest;
 import java.net.InetSocketAddress;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -44,8 +43,11 @@ import static io.hekate.cluster.internal.gossip.GossipNodeStatus.FAILED;
 import static io.hekate.cluster.internal.gossip.GossipNodeStatus.JOINING;
 import static io.hekate.cluster.internal.gossip.GossipNodeStatus.LEAVING;
 import static io.hekate.cluster.internal.gossip.GossipNodeStatus.UP;
+import static java.util.Collections.emptyList;
+import static java.util.Collections.emptySet;
 import static java.util.Collections.unmodifiableSet;
 import static java.util.stream.Collectors.toList;
+import static java.util.stream.Collectors.toSet;
 
 public class GossipManager {
     public static final int GOSSIP_FANOUT_SIZE = 3;
@@ -72,17 +74,19 @@ public class GossipManager {
 
     private final int speedUpSize;
 
+    private final long failureForgetTimeout;
+
     private GossipNodeStatus status;
 
     private Gossip localGossip;
 
     private GossipSeedNodesSate seedNodesSate;
 
-    private Set<ClusterNode> lastTopology = Collections.emptySet();
+    private Set<ClusterNode> lastTopology = emptySet();
 
     private GossipNodeStatus lastStatus;
 
-    private Set<ClusterAddress> knownAddresses = Collections.emptySet();
+    private Set<ClusterAddress> knownAddresses = emptySet();
 
     private boolean leaveScheduled;
 
@@ -90,6 +94,7 @@ public class GossipManager {
         String cluster,
         ClusterNode localNode,
         int speedUpSize,
+        long failureForgetTimeout,
         FailureDetector failureDetector,
         GossipListener gossipListener
     ) {
@@ -104,6 +109,7 @@ public class GossipManager {
         this.failureDetector = failureDetector;
         this.listener = gossipListener;
         this.speedUpSize = speedUpSize;
+        this.failureForgetTimeout = failureForgetTimeout;
 
         id = localNode.id();
 
@@ -639,16 +645,16 @@ public class GossipManager {
 
                 List<ClusterNodeId> terminated = deathWatch.terminateNodes();
 
-                // Set state of terminated nodes to FAILED.
                 if (!terminated.isEmpty()) {
+                    // Set state of terminated nodes to FAILED.
                     List<GossipNodeState> updated = terminated.stream()
-                        .filter(terminatedId -> {
-                            GossipNodeState member = localGossip.member(terminatedId);
+                        .filter(id -> {
+                            GossipNodeState member = localGossip.member(id);
 
                             return member != null && !member.status().isTerminated();
                         })
-                        .map(terminatedId -> {
-                            GossipNodeState from = localGossip.member(terminatedId);
+                        .map(id -> {
+                            GossipNodeState from = localGossip.member(id);
 
                             GossipNodeState to = from.status(FAILED);
 
@@ -663,7 +669,18 @@ public class GossipManager {
                         .collect(toList());
 
                     if (!updated.isEmpty()) {
+                        // Update the gossip state.
                         updateLocalGossip(localGossip.update(id, updated));
+
+                        if (failureForgetTimeout > 0) {
+                            Instant now = Instant.now();
+
+                            Set<GossipNodeFailure> failed = updated.stream()
+                                .map(n -> new GossipNodeFailure(n.address(), now))
+                                .collect(toSet());
+
+                            updateLocalGossip(localGossip.failed(failed));
+                        }
 
                         if (DEBUG) {
                             log.debug("Updated local gossip [gossip={}]", localGossip);
@@ -814,7 +831,7 @@ public class GossipManager {
             }
         }
 
-        return Collections.emptyList();
+        return emptyList();
     }
 
     private boolean tryCoordinate() {
@@ -969,7 +986,7 @@ public class GossipManager {
             localGossip.members().values().stream()
                 .filter(n -> n.node().equals(localNode) || n.status() == UP)
                 .map(GossipNodeState::node)
-                .collect(Collectors.toSet())
+                .collect(toSet())
         );
 
         GossipNodeState thisNode = localGossip.member(id);
@@ -989,7 +1006,7 @@ public class GossipManager {
                 localGossip.members().values().stream()
                     .filter(n -> !n.node().equals(localNode) && n.status() == FAILED && oldTopology.contains(n.node()))
                     .map(GossipNodeState::node)
-                    .collect(Collectors.toSet())
+                    .collect(toSet())
             );
 
             listener.onTopologyChange(oldTopology, newTopology, failed);
@@ -1006,7 +1023,7 @@ public class GossipManager {
         Set<ClusterAddress> newKnown = unmodifiableSet(
             localGossip.members().values().stream()
                 .map(GossipNodeState::address)
-                .collect(Collectors.toSet())
+                .collect(toSet())
         );
 
         if (!oldKnown.equals(newKnown)) {
@@ -1019,7 +1036,7 @@ public class GossipManager {
     private void updateWatchNodes() {
         Set<ClusterAddress> nodesToWatch = localGossip.stream()
             .map(GossipNodeState::address)
-            .collect(Collectors.toSet());
+            .collect(toSet());
 
         failureDetector.update(nodesToWatch);
     }
@@ -1032,6 +1049,6 @@ public class GossipManager {
     }
 
     private void updateLocalGossip(Gossip update) {
-        localGossip = update;
+        localGossip = update.cleanupFailures(failureForgetTimeout);
     }
 }

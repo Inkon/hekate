@@ -70,6 +70,8 @@ public class ClusterServiceFactory implements ServiceFactory<ClusterService> {
 
     private int speedUpGossipSize = DEFAULT_SPEED_UP_SIZE;
 
+    private long failureForgetTimeout;
+
     private StateGuard serviceGuard;
 
     private GossipListener gossipSpy;
@@ -406,6 +408,20 @@ public class ClusterServiceFactory implements ServiceFactory<ClusterService> {
      */
     public ClusterServiceFactory withSpeedUpGossipSize(int speedUpSize) {
         setSpeedUpGossipSize(speedUpSize);
+
+        return this;
+    }
+
+    public long getFailureForgetTimeout() {
+        return failureForgetTimeout;
+    }
+
+    public void setFailureForgetTimeout(long failureForgetTimeout) {
+        this.failureForgetTimeout = failureForgetTimeout;
+    }
+
+    public ClusterServiceFactory withFailureForgetTimeout(long maxFailureTrackTime) {
+        setFailureForgetTimeout(maxFailureTrackTime);
 
         return this;
     }
